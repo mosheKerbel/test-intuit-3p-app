@@ -1,6 +1,6 @@
 const express = require('express');
 const { refreshTokens, isTokenValid } = require('../authClient');
-const { getCompanyInfo, getCustomers, getInvoices, getAccounts, getProfitAndLoss } = require('../qboClient');
+const { getCompanyInfo, getCustomers, getInvoices, getAccounts, getProfitAndLoss, createInvoice, createInvoicesBatch } = require('../qboClient');
 
 const router = express.Router();
 
@@ -66,6 +66,41 @@ router.get('/reports/pnl', requireAuth, async (req, res) => {
   try {
     const data = await getProfitAndLoss(req.session.token, start, end);
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/invoices
+// Body: a single invoice object { CustomerRef, Line, ... }
+router.post('/invoices', requireAuth, async (req, res) => {
+  if (!req.body?.CustomerRef || !req.body?.Line) {
+    return res.status(400).json({ error: 'Body must include "CustomerRef" and "Line".' });
+  }
+  try {
+    const data = await createInvoice(req.session.token, req.body);
+    res.status(201).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/invoices/batch
+// Body: array of invoice objects [{ CustomerRef, Line, ... }, ...]
+router.post('/invoices/batch', requireAuth, async (req, res) => {
+  const invoices = req.body;
+  if (!Array.isArray(invoices) || invoices.length === 0) {
+    return res.status(400).json({ error: 'Body must be a non-empty array of invoice objects.' });
+  }
+  try {
+    const results = await createInvoicesBatch(req.session.token, invoices);
+    const failed = results.filter((r) => !r.success);
+    res.status(failed.length === 0 ? 201 : 207).json({
+      total: invoices.length,
+      succeeded: results.length - failed.length,
+      failed: failed.length,
+      results,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -55,4 +55,25 @@ async function getProfitAndLoss(token, startDate, endDate) {
   });
 }
 
-module.exports = { getCompanyInfo, getCustomers, getInvoices, getAccounts, getProfitAndLoss };
+// Create a single invoice. invoiceData must include CustomerRef and Lines.
+async function createInvoice(token, invoiceData) {
+  const qbo = createQboClient(token);
+  return promisify(qbo, 'createInvoice', invoiceData);
+}
+
+// Create multiple invoices sequentially, collecting results and errors per item.
+async function createInvoicesBatch(token, invoices) {
+  const qbo = createQboClient(token);
+  const results = await Promise.allSettled(
+    invoices.map((invoice) =>
+      promisify(qbo, 'createInvoice', invoice)
+    )
+  );
+  return results.map((r, i) =>
+    r.status === 'fulfilled'
+      ? { index: i, success: true, invoice: r.value }
+      : { index: i, success: false, error: r.reason?.message || r.reason }
+  );
+}
+
+module.exports = { getCompanyInfo, getCustomers, getInvoices, getAccounts, getProfitAndLoss, createInvoice, createInvoicesBatch };

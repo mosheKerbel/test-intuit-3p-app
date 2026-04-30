@@ -6,10 +6,13 @@ const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
 const legalRoutes = require('./routes/legal');
 
+const path = require('path');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret',
   resave: false,
@@ -28,6 +31,7 @@ app.get('/', (req, res) => {
       invoices:   'GET /api/invoices       — list invoices',
       accounts:   'GET /api/accounts       — chart of accounts',
       pnl:        'GET /api/reports/pnl?start=YYYY-MM-DD&end=YYYY-MM-DD',
+      batch_ui:   'GET /batch.html          — batch invoice import UI',
       eula:       'GET /legal/eula          — end-user license agreement',
       privacy:    'GET /legal/privacy       — privacy policy',
     },

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batch Invoice Import</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; padding: 40px 20px; }
+    h1 { font-size: 22px; margin-bottom: 6px; }
+    h2 { font-size: 17px; margin-bottom: 6px; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 32px; }
+
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1); padding: 28px; max-width: 960px; margin: 0 auto 28px; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    th { text-align: left; font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .5px; padding: 0 8px 10px; }
+    td { padding: 6px 8px; }
+    input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; outline: none; transition: border .15s; }
+    input:focus { border-color: #2d7ff9; }
+    input.error { border-color: #e53e3e; }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: background .15s; }
+    .btn-ghost { background: transparent; color: #2d7ff9; border: 1px solid #2d7ff9; }
+    .btn-ghost:hover { background: #f0f6ff; }
+    .btn-primary { background: #2d7ff9; color: #fff; }
+    .btn-primary:hover { background: #1a6de8; }
+    .btn-primary:disabled { background: #a0c4fd; cursor: not-allowed; }
+    .btn-danger { background: transparent; color: #e53e3e; border: none; padding: 6px 8px; font-size: 18px; line-height: 1; cursor: pointer; border-radius: 4px; }
+    .btn-danger:hover { background: #fff5f5; }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+
+    .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+    /* batch submit results */
+    #submitResults { max-width: 960px; margin: 0 auto 28px; display: none; }
+    .result-summary { padding: 14px 18px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; font-weight: 500; }
+    .result-summary.all-good { background: #f0fff4; color: #276749; border: 1px solid #9ae6b4; }
+    .result-summary.partial  { background: #fffbea; color: #744210; border: 1px solid #fbd38d; }
+    .result-summary.all-fail { background: #fff5f5; color: #9b2c2c; border: 1px solid #feb2b2; }
+
+    /* invoices list */
+    .inv-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .inv-table th { background: #f9f9f9; padding: 10px 14px; text-align: left; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #eee; }
+    .inv-table td { padding: 11px 14px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    .inv-table tr:last-child td { border-bottom: none; }
+    .inv-table tr:hover td { background: #fafafa; }
+
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .badge.ok     { background: #f0fff4; color: #276749; }
+    .badge.fail   { background: #fff5f5; color: #9b2c2c; }
+    .badge.paid   { background: #f0fff4; color: #276749; }
+    .badge.open   { background: #ebf4ff; color: #1a56db; }
+    .badge.overdue{ background: #fff5f5; color: #9b2c2c; }
+    .badge.void   { background: #f3f3f3; color: #888; }
+
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; }
+    .spinner-dark { border-color: #555; border-top-color: transparent; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .auth-banner { max-width: 960px; margin: 0 auto 20px; padding: 12px 18px; background: #fffbea; border: 1px solid #fbd38d; border-radius: 8px; font-size: 14px; color: #744210; display: none; }
+    .auth-banner a { color: #2d7ff9; }
+
+    .empty-state { text-align: center; padding: 32px; color: #aaa; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<div class="auth-banner" id="authBanner">
+  Not connected to QuickBooks. <a href="/auth/connect">Connect now</a> before importing.
+</div>
+
+<!-- ── Import form ── -->
+<div class="card">
+  <h1>Batch Invoice Import</h1>
+  <p class="subtitle">Add rows below and submit to create multiple invoices at once in your QuickBooks sandbox.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Customer ID <span title="Value from GET /api/customers" style="cursor:help">ⓘ</span></th>
+        <th>Customer Name</th>
+        <th>Item ID <span title="Value from GET /api/accounts" style="cursor:help">ⓘ</span></th>
+        <th>Description</th>
+        <th>Amount ($)</th>
+        <th>Due Date</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="invoiceRows"></tbody>
+  </table>
+
+  <div class="actions">
+    <button class="btn btn-ghost" onclick="addRow()">+ Add row</button>
+    <button class="btn btn-primary" id="submitBtn" onclick="submitBatch()">Submit Batch</button>
+  </div>
+</div>
+
+<!-- ── Submit results ── -->
+<div id="submitResults">
+  <div class="result-summary" id="resultSummary"></div>
+  <table class="inv-table" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)">
+    <thead>
+      <tr><th>#</th><th>Customer ID</th><th>Amount</th><th>Status</th><th>Invoice ID / Error</th></tr>
+    </thead>
+    <tbody id="resultRows"></tbody>
+  </table>
+</div>
+
+<!-- ── Invoices list ── -->
+<div class="card" id="invoicesCard">
+  <div class="section-header">
+    <div>
+      <h2>All Invoices</h2>
+      <p class="subtitle" style="margin-bottom:0">From your QuickBooks sandbox company</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="loadInvoices()">
+      <span id="refreshIcon">↻</span> Refresh
+    </button>
+  </div>
+  <div id="invoicesList"><div class="empty-state">Loading invoices…</div></div>
+</div>
+
+<script>
+  let rowCount = 0;
+
+  // ── Row management ──────────────────────────────────────────
+  function addRow(defaults = {}) {
+    rowCount++;
+    const n = rowCount;
+    const tr = document.createElement('tr');
+    tr.id = `row-${n}`;
+    tr.innerHTML = `
+      <td style="width:32px;color:#aaa;font-size:13px">${n}</td>
+      <td><input type="text"   id="custId-${n}" placeholder="1"                    value="${defaults.custId  || ''}"></td>
+      <td><input type="text"   id="custName-${n}" placeholder="Amy's Bird Sanctuary" value="${defaults.custName|| ''}"></td>
+      <td><input type="text"   id="itemId-${n}" placeholder="1"                    value="${defaults.itemId  || ''}"></td>
+      <td><input type="text"   id="desc-${n}"   placeholder="Services rendered"    value="${defaults.desc    || ''}"></td>
+      <td style="width:110px"><input type="number" id="amount-${n}" placeholder="100.00" min="0.01" step="0.01" value="${defaults.amount || ''}"></td>
+      <td style="width:140px"><input type="date"   id="due-${n}"                   value="${defaults.due     || ''}"></td>
+      <td style="width:36px"><button class="btn-danger" onclick="removeRow(${n})" title="Remove">×</button></td>
+    `;
+    document.getElementById('invoiceRows').appendChild(tr);
+  }
+
+  function removeRow(n) {
+    const el = document.getElementById(`row-${n}`);
+    if (el) el.remove();
+  }
+
+  // ── Build & validate payload ────────────────────────────────
+  function getRows() {
+    const rows = document.querySelectorAll('#invoiceRows tr');
+    const invoices = [];
+    let valid = true;
+
+    rows.forEach((tr) => {
+      const id = tr.id.replace('row-', '');
+      const custId = document.getElementById(`custId-${id}`);
+      const itemId = document.getElementById(`itemId-${id}`);
+      const amount = document.getElementById(`amount-${id}`);
+
+      [custId, itemId, amount].forEach(el => el.classList.remove('error'));
+
+      if (!custId.value.trim()) { custId.classList.add('error'); valid = false; }
+      if (!itemId.value.trim()) { itemId.classList.add('error'); valid = false; }
+      if (!amount.value || parseFloat(amount.value) <= 0) { amount.classList.add('error'); valid = false; }
+
+      if (custId.value.trim() && itemId.value.trim() && amount.value) {
+        const invoice = {
+          CustomerRef: { value: custId.value.trim() },
+          Line: [{
+            Amount: parseFloat(amount.value),
+            DetailType: 'SalesItemLineDetail',
+            Description: document.getElementById(`desc-${id}`).value || undefined,
+            SalesItemLineDetail: { ItemRef: { value: itemId.value.trim() } },
+          }],
+        };
+        const due = document.getElementById(`due-${id}`).value;
+        if (due) invoice.DueDate = due;
+        invoices.push({ invoice, custId: custId.value.trim(), amount: amount.value });
+      }
+    });
+
+    return { valid, invoices };
+  }
+
+  // ── Submit batch ────────────────────────────────────────────
+  async function submitBatch() {
+    const { valid, invoices } = getRows();
+    if (!valid || invoices.length === 0) return;
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+    try {
+      const res = await fetch('/api/invoices/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(invoices.map(r => r.invoice)),
+      });
+
+      if (res.status === 401) { showAuthBanner(); return; }
+
+      const data = await res.json();
+      showSubmitResults(data, invoices);
+      loadInvoices(); // auto-refresh the list
+    } catch (err) {
+      alert('Network error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Submit Batch';
+    }
+  }
+
+  function showSubmitResults(data, invoices) {
+    const summary = document.getElementById('resultSummary');
+    const tbody   = document.getElementById('resultRows');
+    const section = document.getElementById('submitResults');
+
+    tbody.innerHTML = '';
+    data.results.forEach((r, i) => {
+      const src = invoices[i];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${src?.custId || '—'}</td>
+        <td>$${parseFloat(src?.amount || 0).toFixed(2)}</td>
+        <td><span class="badge ${r.success ? 'ok' : 'fail'}">${r.success ? 'Created' : 'Failed'}</span></td>
+        <td style="font-size:13px;color:#555">${r.success ? (r.invoice?.Id || '—') : r.error}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (data.failed === 0) {
+      summary.className = 'result-summary all-good';
+      summary.textContent = `All ${data.succeeded} invoice${data.succeeded !== 1 ? 's' : ''} created successfully.`;
+    } else if (data.succeeded > 0) {
+      summary.className = 'result-summary partial';
+      summary.textContent = `${data.succeeded} created, ${data.failed} failed.`;
+    } else {
+      summary.className = 'result-summary all-fail';
+      summary.textContent = `All ${data.failed} invoices failed.`;
+    }
+
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // ── Invoices list ───────────────────────────────────────────
+  async function loadInvoices() {
+    const container = document.getElementById('invoicesList');
+    const icon = document.getElementById('refreshIcon');
+    container.innerHTML = '<div class="empty-state"><span class="spinner spinner-dark"></span> Loading…</div>';
+    icon.innerHTML = '<span class="spinner spinner-dark" style="width:13px;height:13px;border-width:2px"></span>';
+
+    try {
+      const res = await fetch('/api/invoices');
+      if (res.status === 401) { showAuthBanner(); container.innerHTML = '<div class="empty-state">Not authenticated.</div>'; return; }
+
+      const data = await res.json();
+      const invoices = data?.QueryResponse?.Invoice || [];
+
+      if (invoices.length === 0) {
+        container.innerHTML = '<div class="empty-state">No invoices found. Create some above!</div>';
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const rows = invoices.map((inv) => {
+        const balance  = parseFloat(inv.Balance || 0);
+        const total    = parseFloat(inv.TotalAmt || 0);
+        const dueDate  = inv.DueDate || '—';
+        const isOverdue = dueDate !== '—' && dueDate < today && balance > 0;
+        const status = inv.PrivateNote === 'Voided' ? 'void'
+                     : balance === 0                ? 'paid'
+                     : isOverdue                    ? 'overdue'
+                     : 'open';
+        const statusLabel = { paid: 'Paid', open: 'Open', overdue: 'Overdue', void: 'Void' }[status];
+
+        return `<tr>
+          <td style="font-weight:500">#${inv.DocNumber || inv.Id}</td>
+          <td>${inv.CustomerRef?.name || inv.CustomerRef?.value || '—'}</td>
+          <td>${inv.TxnDate || '—'}</td>
+          <td>${dueDate}</td>
+          <td>$${total.toFixed(2)}</td>
+          <td style="color:${balance > 0 ? '#e53e3e' : '#276749'};font-weight:500">$${balance.toFixed(2)}</td>
+          <td><span class="badge ${status}">${statusLabel}</span></td>
+          <td style="font-size:12px;color:#aaa">${inv.Id}</td>
+        </tr>`;
+      }).join('');
+
+      container.innerHTML = `
+        <table class="inv-table">
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Customer</th>
+              <th>Date</th>
+              <th>Due</th>
+              <th>Total</th>
+              <th>Balance</th>
+              <th>Status</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p style="font-size:12px;color:#bbb;margin-top:10px;text-align:right">${invoices.length} invoice${invoices.length !== 1 ? 's' : ''}</p>
+      `;
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state">Error loading invoices: ${err.message}</div>`;
+    } finally {
+      icon.textContent = '↻';
+    }
+  }
+
+  function showAuthBanner() {
+    document.getElementById('authBanner').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Init ────────────────────────────────────────────────────
+  addRow();
+  addRow();
+  addRow();
+  loadInvoices();
+</script>
+</body>
+</html>
